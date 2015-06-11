@@ -269,6 +269,9 @@ static inline int dname_external(const struct dentry *dentry)
 	return dentry->d_name.name != dentry->d_iname;
 }
 
+/*
+ * Make sure other CPUs see the inode attached before the type is set.
+ */
 static inline void __d_set_inode_and_type(struct dentry *dentry,
 					  struct inode *inode,
 					  unsigned type_flags)
@@ -276,18 +279,28 @@ static inline void __d_set_inode_and_type(struct dentry *dentry,
 	unsigned flags;
 
 	dentry->d_inode = inode;
+	smp_wmb();
 	flags = READ_ONCE(dentry->d_flags);
 	flags &= ~(DCACHE_ENTRY_TYPE | DCACHE_FALLTHRU);
 	flags |= type_flags;
 	WRITE_ONCE(dentry->d_flags, flags);
 }
 
+/*
+ * Ideally, we want to make sure that other CPUs see the flags cleared before
+ * the inode is detached, but this is really a violation of RCU principles
+ * since the ordering suggests we should always set inode before flags.
+ *
+ * We should instead replace or discard the entire dentry - but that sucks
+ * performancewise on mass deletion/rename.
+ */
 static inline void __d_clear_type_and_inode(struct dentry *dentry)
 {
 	unsigned flags = READ_ONCE(dentry->d_flags);
 
 	flags &= ~(DCACHE_ENTRY_TYPE | DCACHE_FALLTHRU);
 	WRITE_ONCE(dentry->d_flags, flags);
+	smp_wmb();
 	dentry->d_inode = NULL;
 }
 
@@ -357,11 +370,9 @@ static void dentry_unlink_inode(struct dentry * dentry)
 	__releases(dentry->d_inode->i_lock)
 {
 	struct inode *inode = dentry->d_inode;
-
-	raw_write_seqcount_begin(&dentry->d_seq);
 	__d_clear_type_and_inode(dentry);
 	hlist_del_init(&dentry->d_u.d_alias);
-	raw_write_seqcount_end(&dentry->d_seq);
+	dentry_rcuwalk_invalidate(dentry);
 	spin_unlock(&dentry->d_lock);
 	spin_unlock(&inode->i_lock);
 	if (!inode->i_nlink)
@@ -1746,9 +1757,8 @@ static void __d_instantiate(struct dentry *dentry, struct inode *inode)
 	spin_lock(&dentry->d_lock);
 	if (inode)
 		hlist_add_head(&dentry->d_u.d_alias, &inode->i_dentry);
-	raw_write_seqcount_begin(&dentry->d_seq);
 	__d_set_inode_and_type(dentry, inode, add_flags);
-	raw_write_seqcount_end(&dentry->d_seq);
+	dentry_rcuwalk_invalidate(dentry);
 	spin_unlock(&dentry->d_lock);
 	fsnotify_d_instantiate(dentry, inode);
 }
@@ -3051,7 +3061,22 @@ static void get_fs_root_rcu(struct fs_struct *fs, struct path *root)
 	} while (read_seqcount_retry(&fs->seq, seq));
 }
 
-
+/**
+ * d_path - return the path of a dentry
+ * @path: path to report
+ * @buf: buffer to return value in
+ * @buflen: buffer length
+ *
+ * Convert a dentry into an ASCII path name. If the entry has been deleted
+ * the string " (deleted)" is appended. Note that this is ambiguous.
+ *
+ * Returns a pointer into the buffer or an error code if the path was
+ * too long. Note: Callers should use the returned pointer, not the passed
+ * in buffer, to use the name! The implementation often starts at an offset
+ * into the buffer, and may leave 0 bytes at the start.
+ *
+ * "buflen" should be positive.
+ */
 char *d_path(const struct path *path, char *buf, int buflen)
 {
 	char *res = buf + buflen;
