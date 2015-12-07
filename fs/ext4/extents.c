@@ -4798,10 +4798,6 @@ static long ext4_zero_range(struct file *file, loff_t offset,
 	if (mode & FALLOC_FL_KEEP_SIZE)
 		flags |= EXT4_GET_BLOCKS_KEEP_SIZE;
 
-	/* Wait all existing dio workers, newcomers will block on i_mutex */
-	ext4_inode_block_unlocked_dio(inode);
-	inode_dio_wait(inode);
-
 	/* Preallocate the range including the unaligned edges */
 	if (partial_begin || partial_end) {
 		ret = ext4_alloc_file_blocks(file,
@@ -4810,7 +4806,7 @@ static long ext4_zero_range(struct file *file, loff_t offset,
 				 round_down(offset, 1 << blkbits)) >> blkbits,
 				new_size, flags, mode);
 		if (ret)
-			goto out_dio;
+			goto out_mutex;
 
 	}
 
@@ -4819,16 +4815,15 @@ static long ext4_zero_range(struct file *file, loff_t offset,
 		flags |= (EXT4_GET_BLOCKS_CONVERT_UNWRITTEN |
 			  EXT4_EX_NOCACHE);
 
+		/* Wait all existing dio workers, newcomers will block on i_mutex */
+		ext4_inode_block_unlocked_dio(inode);
+		inode_dio_wait(inode);
+
 		/*
 		 * Prevent page faults from reinstantiating pages we have
 		 * released from page cache.
 		 */
 		down_write(&EXT4_I(inode)->i_mmap_sem);
-		ret = ext4_update_disksize_before_punch(inode, offset, len);
-		if (ret) {
-			up_write(&EXT4_I(inode)->i_mmap_sem);
-			goto out_dio;
-		}
 		/* Now release the pages and zero block aligned part of pages */
 		truncate_pagecache_range(inode, start, end - 1);
 		inode->i_mtime = inode->i_ctime = ext4_current_time(inode);
@@ -4963,13 +4958,8 @@ long ext4_fallocate(struct file *file, int mode, loff_t offset, loff_t len)
 			goto out;
 	}
 
-	/* Wait all existing dio workers, newcomers will block on i_mutex */
-	ext4_inode_block_unlocked_dio(inode);
-	inode_dio_wait(inode);
-
 	ret = ext4_alloc_file_blocks(file, lblk, max_blocks, new_size,
 				     flags, mode);
-	ext4_inode_resume_unlocked_dio(inode);
 	if (ret)
 		goto out;
 
@@ -5428,7 +5418,21 @@ int ext4_collapse_range(struct inode *inode, loff_t offset, loff_t len)
 			return ret;
 	}
 
+	/*
+	 * Need to round down offset to be aligned with page size boundary
+	 * for page size > block size.
+	 */
+	ioffset = round_down(offset, PAGE_SIZE);
+
+	/* Write out all dirty pages */
+	ret = filemap_write_and_wait_range(inode->i_mapping, ioffset,
+					   LLONG_MAX);
+	if (ret)
+		return ret;
+
+	/* Take mutex lock */
 	mutex_lock(&inode->i_mutex);
+
 	/*
 	 * There is no need to overlap collapse range with EOF, in which case
 	 * it is effectively a truncate operation
@@ -5453,27 +5457,6 @@ int ext4_collapse_range(struct inode *inode, loff_t offset, loff_t len)
 	 * page cache.
 	 */
 	down_write(&EXT4_I(inode)->i_mmap_sem);
-	/*
-	 * Need to round down offset to be aligned with page size boundary
-	 * for page size > block size.
-	 */
-	ioffset = round_down(offset, PAGE_SIZE);
-	/*
-	 * Write tail of the last page before removed range since it will get
-	 * removed from the page cache below.
-	 */
-	ret = filemap_write_and_wait_range(inode->i_mapping, ioffset, offset);
-	if (ret)
-		goto out_mmap;
-	/*
-	 * Write data that will be shifted to preserve them when discarding
-	 * page cache below. We are also protected from pages becoming dirty
-	 * by i_mmap_sem.
-	 */
-	ret = filemap_write_and_wait_range(inode->i_mapping, offset + len,
-					   LLONG_MAX);
-	if (ret)
-		goto out_mmap;
 	truncate_pagecache(inode, ioffset);
 
 	credits = ext4_writepage_trans_blocks(inode);
