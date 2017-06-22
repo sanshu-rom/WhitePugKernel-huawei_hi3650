@@ -68,6 +68,11 @@ config CPU_FREQ_DEFAULT_GOV_BLU_ACTIVE
 	  loading your cpufreq low-level hardware driver, using the
 	  'interactive' governor for latency-sensitive workloads.
 
+config CPU_FREQ_DEFAULT_GOV_DARKNESS
+	bool "darkness"
+	select CPU_FREQ_GOV_DARKNESS
+	help
+
 config CPU_FREQ_DEFAULT_GOV_PERFORMANCE
 	bool "performance"
 	select CPU_FREQ_GOV_PERFORMANCE
@@ -154,6 +159,10 @@ config CPU_FREQ_GOV_BLU_ACTIVE
 	  module will be called cpufreq_blu_active.
 
 	  If in doubt, say N.
+
+config CPU_FREQ_GOV_DARKNESS
+	tristate "'darkness' cpufreq governor"
+	depends on CPU_FREQ
 
 config CPU_FREQ_GOV_PERFORMANCE
 	tristate "'performance' governor"
