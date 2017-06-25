@@ -128,11 +128,6 @@ write_boot() {
       hash=`cat *-hash`;
       hash="--hash $hash";
     fi;
-    if [ $hash = "unknown" ] || [ -z $hash ]; then
-      if [ ! -z $(getprop ro.cm.device) ]; then
-        $hash=sha1
-      fi;
-    fi;
     if [ -f *-unknown ]; then
       unknown=`cat *-unknown`;
     fi;
