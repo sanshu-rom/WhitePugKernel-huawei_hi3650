@@ -130,7 +130,7 @@ write_boot() {
     fi;
     if [ $hash = "unknown" ] || [ -z $hash ]; then
       if [ ! -z $(getprop ro.cm.device) ]; then
-        $hash="--hash sha1";
+        $hash=sha1
       fi;
     fi;
     if [ -f *-unknown ]; then
