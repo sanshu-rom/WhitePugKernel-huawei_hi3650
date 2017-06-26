@@ -29,7 +29,6 @@ is_slot_device=0;
 ## AnyKernel permissions
 # set permissions for included ramdisk files
 chmod -R 755 $ramdisk
-chmod 644 $ramdisk/sbin/media_profiles.xml
 
 
 ## AnyKernel install
