@@ -139,6 +139,12 @@ config CPU_FREQ_DEFAULT_GOV_SCHED
 	  cpu frequency using CPU utilization estimates from the
 	  scheduler.
 
+config CPU_FREQ_DEFAULT_GOV_BIOSHOCK
+	bool "BioShock"
+	select CPU_FREQ_GOV_BIOSHOCK
+	help
+	  Default governor of BioShock kernel
+
 endchoice
 
 config CPU_FREQ_GOV_ALUCARD
@@ -271,6 +277,13 @@ config CPU_FREQ_GOV_SCHED
 	  does) but instead is event-driven by the scheduler.
 
 	  If in doubt, say N.
+
+config CPU_FREQ_GOV_BIOSHOCK
+	tristate "'bioshock' cpufreq bioshock"
+	default y
+	depends on CPU_FREQ
+	help
+	  'bioshock' - More aggressive version of conservative
 
 comment "CPU frequency scaling drivers"
 
