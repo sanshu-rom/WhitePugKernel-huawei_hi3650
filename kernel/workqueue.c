@@ -50,6 +50,9 @@
 #include <linux/uaccess.h>
 
 #include "workqueue_internal.h"
+#ifdef CONFIG_HISI_BB
+#include <linux/hisi/rdr_hisi_ap_hook.h>
+#endif
 
 enum {
 	/*
@@ -2022,7 +2025,13 @@ __acquires(&pool->lock)
 	lock_map_acquire_read(&pwq->wq->lockdep_map);
 	lock_map_acquire(&lockdep_map);
 	trace_workqueue_execute_start(work);
+#ifdef CONFIG_HISI_BB
+	worker_hook((u64)(worker->current_func), 0);
+#endif
 	worker->current_func(work);
+#ifdef CONFIG_HISI_BB
+	worker_hook((u64)(worker->current_func), 1);
+#endif
 	/*
 	 * While we must be careful to not use "work" after this, the trace
 	 * point will only record its address.
