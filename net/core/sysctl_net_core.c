@@ -22,6 +22,14 @@
 #include <net/busy_poll.h>
 #include <net/pkt_sched.h>
 
+#ifdef CONFIG_HW_CROSSLAYER_OPT
+#include <net/tcp_crosslayer.h>
+#endif
+
+#ifdef CONFIG_HUAWEI_BASTET
+extern int g_FastGrabDscp;
+#endif
+
 static int zero = 0;
 static int one = 1;
 static int min_sndbuf = SOCK_MIN_SNDBUF;
@@ -393,15 +401,50 @@ static struct ctl_table net_core_table[] = {
 		.mode		= 0644,
 		.proc_handler	= proc_dointvec
 	},
+#ifdef CONFIG_HUAWEI_BASTET
 	{
-		.procname	= "max_skb_frags",
-		.data		= &sysctl_max_skb_frags,
+		.procname	= "fg_dscp",
+		.data		= &g_FastGrabDscp,
 		.maxlen		= sizeof(int),
 		.mode		= 0644,
-		.proc_handler	= proc_dointvec_minmax,
-		.extra1		= &one,
-		.extra2		= &max_skb_frags,
+		.proc_handler	= proc_dointvec
 	},
+#endif
+#ifdef CONFIG_HW_CROSSLAYER_OPT
+	/*lint -save -e785 */
+	{
+		/* Aspen log level */
+		.procname	= "aspen_log_level",
+		.data		= &aspen_log_level,
+		.maxlen		= sizeof(int),
+		.mode		= 0644,
+		.proc_handler   = proc_dointvec
+	},
+	{
+		/* Switch of crosslayer dropped notification */
+		.procname	= "aspen_tcp_cdn",
+		.data		= &aspen_tcp_cdn,
+		.maxlen		= sizeof(int),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec
+	},
+#ifdef CONFIG_HW_CROSSLAYER_OPT_DBG_MODULE
+	{
+		.procname       = "aspen_monitor_port_range",
+		.data           = &aspen_monitor_ports.range,
+		.maxlen         = sizeof(aspen_monitor_ports.range),
+		.mode           = 0644,
+		.proc_handler   = proc_aspen_monitor_port_range,
+	},
+	{
+		.procname       = "aspen_monitor",
+		.maxlen         = ASPEN_MONITOR_BUF_MAX,
+		.mode           = 0444,
+		.proc_handler   = proc_aspen_monitor_info,
+	},
+#endif /* CONFIG_HW_CROSSLAYER_OPT_DBG_MODULE */
+	/*lint -restore */
+#endif /* CONFIG_HW_CROSSLAYER_OPT */
 	{ }
 };
 
@@ -413,6 +456,15 @@ static struct ctl_table netns_core_table[] = {
 		.mode		= 0644,
 		.extra1		= &zero,
 		.proc_handler	= proc_dointvec_minmax
+	},
+	{
+		.procname	= "max_skb_frags",
+		.data		= &sysctl_max_skb_frags,
+		.maxlen		= sizeof(int),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec_minmax,
+		.extra1		= &one,
+		.extra2		= &max_skb_frags,
 	},
 	{ }
 };
