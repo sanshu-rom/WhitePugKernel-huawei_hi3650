@@ -46,6 +46,12 @@
 
 #define MPAGE_DA_EXTENT_TAIL 0x01
 
+#ifdef CONFIG_HUAWEI_IO_TRACING
+#include <trace/iotrace.h>
+DEFINE_TRACE(ext4_da_write_begin_end);
+DEFINE_TRACE(mpage_da_map_and_submit);
+#endif
+
 static __u32 ext4_inode_csum(struct inode *inode, struct ext4_inode *raw,
 			      struct ext4_inode_info *ei)
 {
@@ -2654,6 +2660,13 @@ static int ext4_da_write_begin(struct file *file, struct address_space *mapping,
 						      pagep, fsdata);
 		if (ret < 0)
 			return ret;
+
+#ifdef CONFIG_HUAWEI_IO_TRACING
+	if (ret == 1){
+		trace_ext4_da_write_begin_end(inode, pos, len, flags);
+	}
+#endif
+
 		if (ret == 1)
 			return 0;
 	}
@@ -2720,6 +2733,10 @@ retry_journal:
 		page_cache_release(page);
 		return ret;
 	}
+
+#ifdef CONFIG_HUAWEI_IO_TRACING
+	trace_ext4_da_write_begin_end(inode, pos, len, flags);
+#end
 
 	*pagep = page;
 	return ret;
