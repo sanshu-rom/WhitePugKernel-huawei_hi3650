@@ -2736,7 +2736,7 @@ retry_journal:
 
 #ifdef CONFIG_HUAWEI_IO_TRACING
 	trace_ext4_da_write_begin_end(inode, pos, len, flags);
-#end
+#endif
 
 	*pagep = page;
 	return ret;
